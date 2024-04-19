@@ -1,10 +1,6 @@
-/**
- * @typedef {import('puppeteer').Browser} PuppeteerBrowser
- */
-
 const db = require('../models')
-const { getBrowser } = require('../utils/browser')
 const advancePage = require('./advance.page')
+const { JSDOM } = require('jsdom')
 
 const { content: Content, job: Job, website: Website } = db
 
@@ -28,47 +24,32 @@ module.exports = async (website) => {
     /**
      * scraping page
      */
-    /** @type {PuppeteerBrowser} */
-    const browser = getBrowser()
-    const page = await browser.newPage()
-
-    await page.goto(url)
-    const documentTitle = await page.title()
-    const contentHandles = await page.$$(
-      'xpath///*[@id="content"]//div[@class="faq_title"]/../..'
-    )
-    const links = await page.$$eval(
-      'xpath///*[@id="content"]//table//td/a',
-      (elements) => elements.map((e) => e.getAttribute('href'))
-    )
-
     const scrapedContent = []
-    for (const contentHandle of contentHandles) {
-      const faqTitle = await page.evaluate(
-        (el) => el.querySelector('.faq_title > div:nth-child(2)').textContent,
-        contentHandle
-      )
-      const heads = await page.evaluate(
-        (el) =>
-          Object.values(el.querySelectorAll('th')).map((e) => e.textContent),
-        contentHandle
-      )
-      const tables = await page.evaluate(
-        (el) =>
-          Object.values(el.querySelectorAll('td')).map((e) =>
-            e.textContent.trim()
-          ),
-        contentHandle
+    const dom = await JSDOM.fromURL(url)
+    const documentTitle = dom.window.document.querySelector('title').textContent
+    const contentHandles = dom.window.document.querySelectorAll(
+      '#content .faq_title'
+    )
+    const links = Object.values(
+      dom.window.document.querySelectorAll('#content table td a')
+    ).map((e) => e.href)
+    contentHandles.forEach((contentHandle) => {
+      const parentElement = contentHandle.parentNode.parentNode
+      const faqTitle =
+        contentHandle.querySelector('div:nth-child(2)').textContent
+      const tables = Object.values(parentElement.querySelectorAll('td')).map(
+        (e) => e.textContent.trim()
       )
       scrapedContent.push({
         title: faqTitle,
-        content: heads.reduce(
-          (prev, e, idx) => ({ ...prev, [e]: tables[idx] }),
-          {}
-        ),
+        content: tables
+          .slice(0, 3)
+          .reduce(
+            (prev, e, idx) => ({ ...prev, [e]: tables.slice(3)[idx] }),
+            {}
+          ),
       })
-    }
-    page.close()
+    })
 
     /**
      * scraping links

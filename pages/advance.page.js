@@ -1,8 +1,4 @@
-/**
- * @typedef {import('puppeteer').Browser} PuppeteerBrowser
- */
-
-const { getBrowser } = require('../utils/browser')
+const { JSDOM } = require('jsdom')
 const { findAndCompare } = require('../utils/diff')
 
 module.exports = async (url) => {
@@ -10,21 +6,14 @@ module.exports = async (url) => {
     /**
      * scraping page
      */
-    /** @type {PuppeteerBrowser} */
-    const browser = getBrowser()
-    const page = await browser.newPage()
-
-    await page.goto(url)
-    const documentTitle = await page.title()
-
-    const scrapedContent = await page.$eval('xpath///*[@id="content"]', (el) =>
-      el.textContent.trim()
-    )
-    const reviewDate = await page.$eval(
-      'xpath///footer//div[@class="footer-message"]/div[@class="date-message"]/span',
-      (el) => el.textContent.trim()
-    )
-    page.close()
+    const dom = await JSDOM.fromURL(url)
+    const documentTitle = dom.window.document.querySelector('title').textContent
+    const scrapedContent = dom.window.document
+      .querySelector('#content')
+      .textContent.trim()
+    const reviewDate = dom.window.document.documentElement.querySelector(
+      'footer #lastUpdatedDate'
+    ).value
 
     /**
      * compare
@@ -48,6 +37,7 @@ module.exports = async (url) => {
       content,
     }
   } catch (err) {
+    console.log('error: ', err)
     return {
       ok: false,
       url,
